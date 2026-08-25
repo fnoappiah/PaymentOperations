@@ -1,0 +1,657 @@
+﻿@page "/files"
+@using PaymentOperations.Data
+@using PaymentOperations.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
+@inject AppDbContext DbContext
+@inject IJSRuntime JS
+@inject IConfiguration Configuration
+
+<PageTitle>Files</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1">Files</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    All payment files registered in the database
+</MudText>
+
+<MudGrid Spacing="3">
+
+    
+    <MudItem xs="12">
+        <MudPaper Elevation="2" Class="pa-4">
+
+            <MudText Typo="Typo.h6" Class="mb-3">Upload a File</MudText>
+
+            
+            <MudGrid Spacing="3" Class="mb-4" Style="align-items: flex-end;">
+
+                <MudItem xs="12" sm="3" md="2">
+                    <MudFileUpload T="IBrowserFile"
+                                   @bind-Files="_file"
+                                   Accept=".pdf,.xml,.csv,.xlsx,.xls,.zip,.txt,.json,.bin"
+                                   Class="d-flex"
+                                   Style="height: 50px; margin-left:1px;">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.AttachFile"
+                                       FullWidth="true"
+                                       Style="height:56px;">
+                                @(_file is null ? "Browse Files" : _file.Name)
+                            </MudButton>
+                        </ActivatorContent>
+                    </MudFileUpload>
+                </MudItem>
+
+                <MudItem xs="12" sm="3" md="2">
+                    <MudSelect T="string"
+                               Label="Select Bank"
+                               @bind-Value="_selectedBank"
+                               Variant="Variant.Outlined"
+                               FullWidth="true">
+                        @foreach (var bank in _banks)
+                        {
+                            <MudSelectItem Value="@bank">@bank</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="3" md="2">
+                    <MudSelect T="string"
+                               Label="Select App"
+                               @bind-Value="_selectedApp"
+                               Variant="Variant.Outlined"
+                               FullWidth="true">
+                        @foreach (var app in _apps)
+                        {
+                            <MudSelectItem Value="@app">@app</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="3" md="2">
+                    <MudTextField @bind-Value="_description"
+                                  Label="Description"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true" />
+                </MudItem>
+
+                <MudItem xs="12" sm="3" md="2">
+                    <MudTextField @bind-Value="_uploaderName"
+                                  Label="Your Name"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true" />
+                </MudItem>
+
+                <MudItem xs="12" sm="3" md="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Upload"
+                               OnClick="UploadFileAsync"
+                               FullWidth="true"
+                               Style="height:56px; margin-bottom: 5px; margin-left: 10px; width:180px"
+                               Disabled="@(_file is null || _uploading || string.IsNullOrEmpty(_selectedBank) || string.IsNullOrEmpty(_selectedApp) || string.IsNullOrEmpty(_uploaderName))">
+                        @if (_uploading)
+                        {
+                            <MudProgressCircular Size="Size.Small"
+                                                 Indeterminate="true"
+                                                 Class="mr-2" />
+                            <span>Uploading...</span>
+                        }
+                        else
+                        {
+                            <span>Upload</span>
+                        }
+                    </MudButton>
+                </MudItem>
+
+            </MudGrid>
+
+            
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+
+                <MudCheckBox @bind-Value="_ncrTested"
+                             Label="NCR Tested"
+                             Color="Color.Primary"
+                             Size="Size.Small" />
+
+                <MudCheckBox @bind-Value="_bankTested"
+                             Label="Bank Tested"
+                             Color="Color.Primary"
+                             Size="Size.Small" />
+
+                <MudCheckBox @bind-Value="_bankProduce"
+                             Label="Production"
+                             Color="Color.Primary"
+                             Size="Size.Small" />
+
+            </MudStack>
+
+            @if (_uploading)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mt-3">
+                    <MudStack Spacing="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.body2">
+                                <b>@_file!.Name</b>
+                            </MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Primary">
+                                <b>@_uploadProgress%</b>
+                            </MudText>
+                        </MudStack>
+                        <MudProgressLinear Value="@_uploadProgress"
+                                           Color="Color.Primary"
+                                           Rounded="true"
+                                           Size="Size.Medium"
+                                           Class="mt-1" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @FormatBytes(_uploadedBytes) of @FormatBytes(_totalBytes)
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (!string.IsNullOrEmpty(_message))
+            {
+                <MudAlert Severity="@_severity"
+                          Dense="true"
+                          ShowCloseIcon="true"
+                          CloseIconClicked="@(() => _message = string.Empty)"
+                          Class="mt-3">
+                    @_message
+                </MudAlert>
+            }
+
+        </MudPaper>
+    </MudItem>
+
+    
+    <MudItem xs="12">
+        <MudPaper Elevation="2" Class="pa-3">
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudTextField Value="_search"
+                              ValueChanged="@((string s) => OnSearch(s))"
+                              Placeholder="Search by file name, app or bank..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Style="max-width: 350px;"
+                              Immediate="true" />
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                               Title="Refresh"
+                               OnClick="LoadFilesAsync" />
+            </MudStack>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true"
+                                   Color="Color.Primary"
+                                   Class="mb-2" />
+            }
+
+            <MudTable Items="_files"
+                      Dense="true"
+                      Hover="true"
+                      Striped="true"
+                      Breakpoint="Breakpoint.Sm"
+                      @bind-SelectedItem="_selected"
+                      T="PaymentFile">
+                <HeaderContent>
+                    <MudTh>File Name</MudTh>
+                    <MudTh>App</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Bank</MudTh>
+                    <MudTh>Uploaded By</MudTh>
+                    <MudTh>Upload Date</MudTh>
+                    <MudTh>NCR Tested</MudTh>
+                    <MudTh>Bank Tested</MudTh>
+                    <MudTh>Production</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.FileName</MudTd>
+                    <MudTd>@context.AppName</MudTd>
+                    <MudTd>@(context.Description ?? "—")</MudTd>
+                    <MudTd>@(context.BankName ?? "—")</MudTd>
+                    <MudTd>@context.UploaderName</MudTd>
+                    <MudTd>@context.UploadDate.ToString("yyyy-MM-dd")</MudTd>
+                    <MudTd>
+                        <MudIcon Icon="@(context.NCRTested? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(context.NCRTested ? Color.Success : Color.Error)"
+                                 Size="Size.Small" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIcon Icon="@(context.BankTested? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(context.BankTested ? Color.Success : Color.Error)"
+                                 Size="Size.Small" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIcon Icon="@(context.BankProduce? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(context.BankProduce ? Color.Success : Color.Error)"
+                                 Size="Size.Small" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       Title="Download"
+                                       OnClick="@(() => DownloadFileAsync(context.Path))" />
+                    </MudTd>
+                    
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+                        No files found.
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            @if (_selected is not null)
+            {
+                <MudDivider Class="my-3" />
+
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Selected file path:
+                </MudText>
+
+                <MudPaper Outlined="true" Class="pa-3 mt-1"
+                          Style="background: var(--mud-palette-background-grey);">
+
+                    <MudText Style="font-family: monospace; color: var(--mud-palette-info); word-break: break-all;">
+                        @_selected.Path
+                    </MudText>
+                    
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Download"
+                                   OnClick="@(() => DownloadFileAsync(_selected.Path))">
+                            Download
+                        </MudButton>
+
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="@(() => StartEdit(_selected))">
+                            Edit
+                        </MudButton>
+
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Delete"
+                                   OnClick="DeleteSelectedFile">
+                            Delete
+                        </MudButton>
+
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (_editingFile is not null)
+            {
+                <MudDivider Class="my-3" />
+
+                <MudPaper Elevation="1" Class="pa-4 mt-2">
+
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-1" Size="Size.Small" />
+                        Edit: @_editingFile.FileName
+                    </MudText>
+
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudSelect T="string"
+                                       Label="App"
+                                       @bind-Value="_editApp"
+                                       Variant="Variant.Outlined"
+                                       FullWidth="true">
+                                @foreach (var app in _apps)
+                                {
+                                    <MudSelectItem Value="@app">@app</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudTextField @bind-Value="_editDescription"
+                                          Label="Description"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true" />
+                        </MudItem>
+
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudTextField @bind-Value="_editUploaderName"
+                                          Label="Uploader Name"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                                <MudCheckBox @bind-Value="_editNcrTested"
+                                             Label="NCR Tested"
+                                             Color="Color.Primary"
+                                             Size="Size.Small" />
+                                <MudCheckBox @bind-Value="_editBankTested"
+                                             Label="Bank Tested"
+                                             Color="Color.Primary"
+                                             Size="Size.Small" />
+                                <MudCheckBox @bind-Value="_editBankProduce"
+                                             Label="Production"
+                                             Color="Color.Primary"
+                                             Size="Size.Small" />
+                            </MudStack>
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Save"
+                                           OnClick="SaveEditAsync"
+                                           Disabled="@(string.IsNullOrEmpty(_editApp) || string.IsNullOrEmpty(_editUploaderName))">
+                                    Save Changes
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Default"
+                                           OnClick="CancelEdit">
+                                    Cancel
+                                </MudButton>
+                            </MudStack>
+                        </MudItem>
+
+                    </MudGrid>
+
+                </MudPaper>
+            }
+
+        </MudPaper>
+    </MudItem>
+
+</MudGrid>
+
+@code {
+
+    private List<PaymentFile> _files = new();
+    private PaymentFile? _selected;
+    private bool _loading = false;
+    private string _search = string.Empty;
+    private List<string> _banks = new();
+    private string? _selectedBank;
+
+    private List<string> _apps = new();
+    private string? _selectedApp;
+
+    private IBrowserFile? _file;
+    private bool _uploading = false;
+    private string _message = string.Empty;
+    private Severity _severity = Severity.Success;
+    private bool _ncrTested = false;
+    private bool _bankTested = false;
+    private bool _bankProduce = false;
+    private string _uploaderName = string.Empty;
+    private string? _description = null;
+
+    // Upload progress
+    private int _uploadProgress = 0;
+    private long _uploadedBytes = 0;
+    private long _totalBytes = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _banks = Configuration.GetSection("Banks").Get<List<string>>() ?? new();
+        _apps = Configuration.GetSection("Apps").Get<List<string>>() ?? new();
+        await LoadFilesAsync();
+    }
+
+    private async Task LoadFilesAsync()
+    {
+        _loading = true;
+        _files = await DbContext.PaymentFiles
+            .OrderByDescending(f => f.UploadDate)
+            .ToListAsync();
+        _loading = false;
+    }
+
+    private void OnSearch(string value)
+    {
+        _search = value;
+        var lower = value.ToLower();
+        _files = DbContext.PaymentFiles
+            .Where(f => f.FileName.ToLower().Contains(lower)
+                     || f.AppName.ToLower().Contains(lower)
+                     || (f.BankName != null && f.BankName.ToLower().Contains(lower)))
+            .OrderByDescending(f => f.UploadDate)
+            .ToList();
+    }
+
+    private async Task UploadFileAsync()
+    {
+        if (_file is null || string.IsNullOrEmpty(_selectedBank) || string.IsNullOrEmpty(_selectedApp) || string.IsNullOrEmpty(_uploaderName)) return;
+
+        _uploading = true;
+        _message = string.Empty;
+        _uploadProgress = 0;
+        _uploadedBytes = 0;
+        _totalBytes = _file.Size;
+
+        try
+        {
+            var basePath = Configuration["UploadSettings:BasePath"]
+                ?? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Downloads", "PaymentUploads");
+
+            var bankFolder = Path.Combine(basePath, _selectedBank, _selectedApp);
+
+            if (!Directory.Exists(bankFolder))
+                Directory.CreateDirectory(bankFolder);
+
+            var originalFileName = Path.GetFileName(_file.Name);
+            var fileName = GetUniqueFileName(bankFolder, originalFileName);
+            var fullPath = Path.Combine(bankFolder, fileName);
+
+            // Chunked copy with progress tracking
+            const int chunkSize = 81920; // 80 KB chunks
+            var buffer = new byte[chunkSize];
+            await using var sourceStream = _file.OpenReadStream(maxAllowedSize: long.MaxValue);
+            await using var destStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write);
+
+            int bytesRead;
+            while ((bytesRead = await sourceStream.ReadAsync(buffer)) > 0)
+            {
+                await destStream.WriteAsync(buffer.AsMemory(0, bytesRead));
+                _uploadedBytes += bytesRead;
+                _uploadProgress = _totalBytes > 0
+                    ? (int)((_uploadedBytes * 100) / _totalBytes)
+                    : 0;
+                StateHasChanged();
+                await Task.Delay(1); // yield to let the UI render
+            }
+
+            _uploadProgress = 100;
+            StateHasChanged();
+
+            var record = new PaymentFile
+            {
+                FileName = fileName,
+                UploadDate = DateTime.Now,
+                PatchDate = DateTime.Now,
+                Path = fullPath,
+                UploaderName = _uploaderName!,
+                AppName = _selectedApp!,
+                BankName = _selectedBank,
+                Description = _description,
+                Creator = "Unknown",
+                NCRTested = _ncrTested,
+                BankTested = _bankTested,
+                BankProduce = _bankProduce
+            };
+
+            DbContext.PaymentFiles.Add(record);
+            await DbContext.SaveChangesAsync();
+
+            _message = fileName != originalFileName
+                ? $"'{originalFileName}' already exists — uploaded as '{fileName}' to {_selectedBank}/{_selectedApp}."
+                : $"{fileName} uploaded to {_selectedBank}/{_selectedApp}.";
+            _severity = Severity.Success;
+
+            _file = null;
+            _selectedBank = null;
+            _selectedApp = null;
+            _uploaderName = string.Empty;
+            _description = null;
+            _ncrTested = false;
+            _bankTested = false;
+            _bankProduce = false;
+
+            await LoadFilesAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Upload failed: {ex.Message}";
+            _severity = Severity.Error;
+        }
+        finally
+        {
+            _uploading = false;
+            _uploadProgress = 0;
+            _uploadedBytes = 0;
+            _totalBytes = 0;
+        }
+    }
+
+    private string GetUniqueFileName(string folder, string fileName)
+    {
+        var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+        var ext = Path.GetExtension(fileName);
+
+        // Check if this base name (or any _N variant) already exists on disk or in the DB
+        var exists = File.Exists(Path.Combine(folder, fileName))
+                  || DbContext.PaymentFiles.Any(f => f.FileName == fileName && f.BankName == _selectedBank && f.AppName == _selectedApp);
+
+        if (!exists)
+            return fileName;
+
+        // Find next available number
+        int counter = 2;
+        while (true)
+        {
+            var candidate = $"{nameWithoutExt}_{counter}{ext}";
+            var candidatePath = Path.Combine(folder, candidate);
+            var candidateExists = File.Exists(candidatePath)
+                               || DbContext.PaymentFiles.Any(f => f.FileName == candidate && f.BankName == _selectedBank && f.AppName == _selectedApp);
+            if (!candidateExists)
+                return candidate;
+            counter++;
+        }
+    }
+
+    private async Task DeleteSelectedFile()
+    {
+        if (_selected is null) return;
+
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Are you sure you want to delete '{_selected.FileName}' from {_selected.BankName}?");
+
+        if (!confirm) return;
+
+        try
+        {
+            if (File.Exists(_selected.Path))
+            {
+                File.Delete(_selected.Path);
+            }
+
+            DbContext.PaymentFiles.Remove(_selected);
+            await DbContext.SaveChangesAsync();
+
+            _message = $"{_selected.FileName} deleted successfully.";
+            _severity = Severity.Success;
+            _selected = null;
+
+            await LoadFilesAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Delete failed: {ex.Message}";
+            _severity = Severity.Error;
+        }
+    }
+
+    private async Task DownloadFileAsync(string fullPath)
+    {
+        var encoded = Uri.EscapeDataString(fullPath);
+        await JS.InvokeVoidAsync("open", $"/api/download?path={encoded}", "_blank");
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        return bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+            < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
+            _ => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
+        };
+    }
+
+
+
+    private PaymentFile? _editingFile;
+    private string _editApp = string.Empty;
+    private string _editUploaderName = string.Empty;
+    private string? _editDescription = null;
+    private bool _editNcrTested;
+    private bool _editBankTested;
+    private bool _editBankProduce;
+
+    private void StartEdit(PaymentFile file)
+    {
+        _editingFile = file;
+        _editApp = file.AppName;
+        _editUploaderName = file.UploaderName;
+        _editDescription = file.Description;
+        _editNcrTested = file.NCRTested;
+        _editBankTested = file.BankTested;
+        _editBankProduce = file.BankProduce;
+    }
+
+    private void CancelEdit()
+    {
+        _editingFile = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editingFile is null) return;
+
+        try
+        {
+            _editingFile.AppName = _editApp;
+            _editingFile.UploaderName = _editUploaderName;
+            _editingFile.Description = _editDescription;
+            _editingFile.NCRTested = _editNcrTested;
+            _editingFile.BankTested = _editBankTested;
+            _editingFile.BankProduce = _editBankProduce;
+            _editingFile.PatchDate = DateTime.Now;
+
+            DbContext.PaymentFiles.Update(_editingFile);
+            await DbContext.SaveChangesAsync();
+
+            _message = $"{_editingFile.FileName} updated successfully.";
+            _severity = Severity.Success;
+
+            _editingFile = null;
+            await LoadFilesAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = $"Update failed: {ex.Message}";
+            _severity = Severity.Error;
+        }
+    }
+}

@@ -1,0 +1,339 @@
+﻿@page "/filter"
+@using PaymentOperations.Data
+@using PaymentOperations.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext DbContext
+@inject IJSRuntime JS
+@inject IConfiguration Configuration
+
+<PageTitle>Filter Files</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1">Filter Files</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Search and filter payment files by any combination of criteria
+</MudText>
+
+<MudGrid Spacing="3">
+
+    <!-- Filter Panel  -->
+    <MudItem xs="12">
+        <MudPaper Elevation="2" Class="pa-4">
+
+            <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+
+            <MudGrid Spacing="3">
+
+                <!-- Bank  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string"
+                               Label="Bank"
+                               @bind-Value="_filterBank"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               FullWidth="true">
+                        @foreach (var bank in _banks)
+                        {
+                            <MudSelectItem Value="@bank">@bank</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <!-- App  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string"
+                               Label="App"
+                               @bind-Value="_filterApp"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               FullWidth="true">
+                        @foreach (var app in _apps)
+                        {
+                            <MudSelectItem Value="@app">@app</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <!-- Uploader Name  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField @bind-Value="_filterUploader"
+                                  Label="Uploader Name"
+                                  Variant="Variant.Outlined"
+                                  Clearable="true"
+                                  Immediate="true"
+                                  FullWidth="true" />
+                </MudItem>
+
+                <!-- Upload Date From  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker Label="Upload Date From"
+                                   @bind-Date="_filterDateFrom"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true"
+                                   Style="width: 100%;" />
+                </MudItem>
+
+                <!-- Upload Date To  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker Label="Upload Date To"
+                                   @bind-Date="_filterDateTo"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true"
+                                   Style="width: 100%;" />
+                </MudItem>
+
+                <!-- NCR Tested  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="bool?"
+                               Label="NCR Tested"
+                               @bind-Value="_filterNcr"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               FullWidth="true">
+                        <MudSelectItem T="bool?" Value="@true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="@false">No</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <!-- Bank Tested  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="bool?"
+                               Label="Bank Tested"
+                               @bind-Value="_filterBankTested"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               FullWidth="true">
+                        <MudSelectItem T="bool?" Value="@true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="@false">No</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <!-- Production  -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="bool?"
+                               Label="Production"
+                               @bind-Value="_filterProduce"
+                               Variant="Variant.Outlined"
+                               Clearable="true"
+                               FullWidth="true">
+                        <MudSelectItem T="bool?" Value="@true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="@false">No</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+            </MudGrid>
+
+            <MudStack Row="true" Spacing="2" Class="mt-4">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Search"
+                           OnClick="ApplyFilters">
+                    Apply Filters
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.ClearAll"
+                           OnClick="ClearFilters">
+                    Clear All
+                </MudButton>
+            </MudStack>
+
+        </MudPaper>
+    </MudItem>
+
+    <!-- Results  -->
+    <MudItem xs="12">
+        <MudPaper Elevation="2" Class="pa-3">
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.subtitle1">
+                    Results
+                    @if (_hasFiltered)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">@_files.Count file(s)</MudChip>
+                    }
+                </MudText>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                               Title="Refresh"
+                               OnClick="LoadAllAsync" />
+            </MudStack>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+            }
+
+            <MudTable Items="_files"
+                      Dense="true"
+                      Hover="true"
+                      Striped="true"
+                      Breakpoint="Breakpoint.Sm"
+                      @bind-SelectedItem="_selected"
+                      T="PaymentFile">
+                <HeaderContent>
+                    <MudTh>File Name</MudTh>
+                    <MudTh>App</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Bank</MudTh>
+                    <MudTh>Uploaded By</MudTh>
+                    <MudTh>Upload Date</MudTh>
+                    <MudTh>NCR</MudTh>
+                    <MudTh>Bank Tested</MudTh>
+                    <MudTh>Production</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.FileName</MudTd>
+                    <MudTd>@context.AppName</MudTd>
+                    <MudTd>@(context.Description ?? "—")</MudTd>
+                    <MudTd>@(context.BankName ?? "—")</MudTd>
+                    <MudTd>@context.UploaderName</MudTd>
+                    <MudTd>@context.UploadDate.ToString("yyyy-MM-dd")</MudTd>
+                    <MudTd>
+                        <MudIcon Icon="@(context.NCRTested? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(context.NCRTested ? Color.Success : Color.Error)"
+                                 Size="Size.Small" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIcon Icon="@(context.BankTested? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(context.BankTested ? Color.Success : Color.Error)"
+                                 Size="Size.Small" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIcon Icon="@(context.BankProduce? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Cancel)"
+                                 Color="@(context.BankProduce ? Color.Success : Color.Error)"
+                                 Size="Size.Small" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Size="Size.Small"
+                                       Color="Color.Primary"
+                                       Title="Download"
+                                       OnClick="@(() => DownloadFileAsync(context.Path))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+                        @(_hasFiltered ? "No files match the selected filters." : "Apply filters above to search files.")
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            @if (_selected is not null)
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Selected file path:</MudText>
+                <MudPaper Outlined="true" Class="pa-3 mt-1"
+                          Style="background: var(--mud-palette-background-grey);">
+                    <MudText Style="font-family: monospace; color: var(--mud-palette-info); word-break: break-all;">
+                        @_selected.Path
+                    </MudText>
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Download"
+                                   OnClick="@(() => DownloadFileAsync(_selected.Path))">
+                            Download
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+
+        </MudPaper>
+    </MudItem>
+
+</MudGrid>
+
+@code {
+
+    private List<PaymentFile> _files = new();
+    private PaymentFile? _selected;
+    private bool _loading = false;
+    private bool _hasFiltered = false;
+
+    private List<string> _banks = new();
+    private List<string> _apps = new();
+
+    // Filter fields
+    private string? _filterBank = null;
+    private string? _filterApp = null;
+    private string _filterUploader = string.Empty;
+    private DateTime? _filterDateFrom = null;
+    private DateTime? _filterDateTo = null;
+    private bool? _filterNcr = null;
+    private bool? _filterBankTested = null;
+    private bool? _filterProduce = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _banks = Configuration.GetSection("Banks").GetChildren().Select(x => x.Value ?? "").Where(x => x != "").ToList();
+        _apps = Configuration.GetSection("Apps").GetChildren().Select(x => x.Value ?? "").Where(x => x != "").ToList();
+        await LoadAllAsync();
+    }
+
+    private async Task LoadAllAsync()
+    {
+        _loading = true;
+        _files = await DbContext.PaymentFiles
+            .OrderByDescending(f => f.UploadDate)
+            .ToListAsync();
+        _hasFiltered = false;
+        _loading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        _loading = true;
+
+        var query = DbContext.PaymentFiles.AsQueryable();
+
+        if (!string.IsNullOrEmpty(_filterBank))
+            query = query.Where(f => f.BankName == _filterBank);
+
+        if (!string.IsNullOrEmpty(_filterApp))
+            query = query.Where(f => f.AppName == _filterApp);
+
+        if (!string.IsNullOrWhiteSpace(_filterUploader))
+            query = query.Where(f => f.UploaderName.ToLower().Contains(_filterUploader.ToLower()));
+
+        if (_filterDateFrom.HasValue)
+            query = query.Where(f => f.UploadDate.Date >= _filterDateFrom.Value.Date);
+
+        if (_filterDateTo.HasValue)
+            query = query.Where(f => f.UploadDate.Date <= _filterDateTo.Value.Date);
+
+        if (_filterNcr.HasValue)
+            query = query.Where(f => f.NCRTested == _filterNcr.Value);
+
+        if (_filterBankTested.HasValue)
+            query = query.Where(f => f.BankTested == _filterBankTested.Value);
+
+        if (_filterProduce.HasValue)
+            query = query.Where(f => f.BankProduce == _filterProduce.Value);
+
+        _files = query.OrderByDescending(f => f.UploadDate).ToList();
+        _hasFiltered = true;
+        _selected = null;
+        _loading = false;
+    }
+
+    private async Task ClearFilters()
+    {
+        _filterBank = null;
+        _filterApp = null;
+        _filterUploader = string.Empty;
+        _filterDateFrom = null;
+        _filterDateTo = null;
+        _filterNcr = null;
+        _filterBankTested = null;
+        _filterProduce = null;
+        _selected = null;
+        await LoadAllAsync();
+    }
+
+    private async Task DownloadFileAsync(string fullPath)
+    {
+        var encoded = Uri.EscapeDataString(fullPath);
+        await JS.InvokeVoidAsync("open", $"/api/download?path={encoded}", "_blank");
+    }
+}

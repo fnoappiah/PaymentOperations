@@ -1,0 +1,96 @@
+﻿@page "/"
+@using PaymentOperations.Data
+@using PaymentOperations.Models
+@inject AppDbContext DbContext
+
+<PageTitle>Dashboard</PageTitle>
+
+
+
+<MudText Typo="Typo.h5" Class="mb-1">Dashboard</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Welcome to PaymentOps
+</MudText>
+
+<MudGrid Spacing="3">
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h4" Color="Color.Primary">@_totalFiles</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Total Files</MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h4" Color="Color.Success">@_ncrTested</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">NCR Tested</MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h4" Color="Color.Info">@_bankTested</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Bank Tested</MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h4" Color="Color.Warning">@_inProduction</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">In Production</MudText>
+        </MudPaper>
+    </MudItem>
+
+</MudGrid>
+
+<MudDivider Class="my-4" />
+
+<MudText Typo="Typo.h6" Class="mb-2">Recent Files</MudText>
+
+<MudPaper Elevation="1">
+    @if (_recentFiles.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+            No files in the database yet.
+        </MudText>
+    }
+    else
+    {
+        <MudTable Items="_recentFiles" Dense="true" Hover="true" Elevation="0" T="PaymentFile">
+            <HeaderContent>
+                <MudTh>File Name</MudTh>
+                <MudTh>App</MudTh>
+                <MudTh>Bank</MudTh>
+                <MudTh>Uploaded By</MudTh>
+                <MudTh>Date</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.FileName</MudTd>
+                <MudTd>@context.AppName</MudTd>
+                <MudTd>@(context.BankName ?? "—")</MudTd>
+                <MudTd>@context.UploaderName</MudTd>
+                <MudTd>@context.UploadDate.ToString("yyyy-MM-dd")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private int _totalFiles;
+    private int _ncrTested;
+    private int _bankTested;
+    private int _inProduction;
+    private List<PaymentFile> _recentFiles = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var files = DbContext.PaymentFiles.ToList();
+        _totalFiles = files.Count;
+        _ncrTested = files.Count(f => f.NCRTested);
+        _bankTested = files.Count(f => f.BankTested);
+        _inProduction = files.Count(f => f.BankProduce);
+        _recentFiles = files.OrderByDescending(f => f.UploadDate).Take(5).ToList();
+        await Task.CompletedTask;
+    }
+}
